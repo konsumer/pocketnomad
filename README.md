@@ -1,8 +1,6 @@
-The purpose of this is a full build system, designed for M5 CardputerADV with CAP-1262 lora hat.
+This is a Reticulum/LXMF client for the CardputerADV.
 
-I want to emulate everything on web, so I can quickly test things. Each hardware-subsystem has a uniform way of working with it (setup/loop) and you can pick-and-choose what subsystems you need (pre-configured for CardputerADV.)
-
-The idea is to be sort of similar to `M5Cardputer` class, but work on web & native, and be a bit easier (since things are more setup for you.)
+## development
 
 ```sh
 # download libs
@@ -11,11 +9,8 @@ npm i
 # reloading web version
 npm start
 
-# build and uplaod to real cardputer
+# build and upload to real cardputer
 npm run cardputer
-
-# run native
-npm run native
 ```
 
 On the web, you can inject things it doesn't support (ir/radio/etc) for testing:

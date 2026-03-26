@@ -8,7 +8,7 @@ set -e
 LIBDIR=.pio/build/web
 OUTDIR=web
 LIBSRC=".pio/libdeps/native/M5GFX/src"
-INCLUDES="-I $LIBSRC"
+INCLUDES="-I $LIBSRC -I .pio/libdeps/native/Reticulum -I .pio/libdeps/native/Crypto"
 DEFINES="-D __EMSCRIPTEN__ -D LGFX_USE_SDL -D M5GFX_BOARD=board_M5Cardputer -s USE_SDL=2"
 EMFLAGS="-s USE_SDL=2 -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s FORCE_FILESYSTEM=1 -lidbfs.js --pre-js scripts/pre.js -s EXPORTED_FUNCTIONS=['_main','_malloc','_free'] -s EXPORTED_RUNTIME_METHODS=['HEAPU8'] -Wl,--export-if-defined=cardputerLoraInject -Wl,--export-if-defined=cardputerGpsSet -Wl,--export-if-defined=cardputerMotionSet"
 
@@ -26,6 +26,8 @@ mkdir -p "$LIBDIR"
 echo "==> Building M5GFX library objects (skipping up-to-date files)..."
 OBJS=()
 for src in \
+  .pio/libdeps/native/Reticulum/*.cpp \
+  .pio/libdeps/native/Crypto/*.cpp \
   "$LIBSRC/M5GFX.cpp" \
   "$LIBSRC/lgfx/v1/"*.cpp \
   "$LIBSRC/lgfx/v1/misc/"*.cpp \

@@ -1,0 +1,8 @@
+// monochrome dark
+
+#define THEME_FG WHITE
+#define THEME_BG BLACK
+#define THEME_TAB_FG LIGHTGREY
+#define THEME_TAB_BG BLACK
+#define THEME_TAB_ACTIVE_FG BLACK
+#define THEME_TAB_ACTIVE_BG DARKGREY
