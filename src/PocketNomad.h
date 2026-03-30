@@ -4,6 +4,7 @@
 #include "hal/Cardputer.h"
 #include "hal/CardputerSd.h"
 #include "hal/CardputerLora.h"
+#include "hal/CardputerTask.h"
 
 // shared because this is used for UI
 Cardputer c;
