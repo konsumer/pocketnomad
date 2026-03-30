@@ -4,6 +4,7 @@
 
 #include <M5GFX.h>
 #include <functional>
+#include <vector>
 
 #ifdef SDL_h_
 #ifdef __EMSCRIPTEN__
@@ -59,9 +60,10 @@ public:
 
   void loop() {
 #ifdef SDL_h_
-    if (_pending && onMessage) {
-      _pending = false;
-      onMessage(_buf, _len);
+    if (!_queue.empty() && onMessage) {
+      _Packet pkt = _queue.front();
+      _queue.erase(_queue.begin());
+      onMessage(pkt.data, pkt.len);
     }
 #else
     if (_rx_flag && _sx) {
@@ -102,17 +104,17 @@ public:
 
 private:
 #ifdef SDL_h_
-  uint8_t _buf[256] = {};
-  int     _len      = 0;
-  bool    _pending  = false;
+  struct _Packet { uint8_t data[256]; int len; };
+  std::vector<_Packet> _queue;
 public:
   // Called from JS (Emscripten) or test harness to inject a received packet
   static void inject(uint8_t *data, int len) {
     if (!_instance) return;
-    if (len > (int)sizeof(_instance->_buf)) len = sizeof(_instance->_buf);
-    memcpy(_instance->_buf, data, len);
-    _instance->_len = len;
-    _instance->_pending = true;
+    _Packet pkt;
+    if (len > (int)sizeof(pkt.data)) len = sizeof(pkt.data);
+    memcpy(pkt.data, data, len);
+    pkt.len = len;
+    _instance->_queue.push_back(pkt);
   }
 private:
 #else

@@ -4,9 +4,13 @@
 
 #include <M5GFX.h>
 
+#include <vector>
+#include <string>
+
 #ifdef SDL_h_
 #include <stdio.h>
 #include <dirent.h>
+#include <errno.h>
 #include <sys/stat.h>
 #include <string.h>
 #include <unistd.h>
@@ -83,10 +87,51 @@ public:
 #endif
   }
 
+  // List filenames (not subdirs) in dirname into out vector. Returns count.
+  int readDir(const char *dirname, std::vector<std::string>& out) {
+#ifdef SDL_h_
+    char full[512]; _path(full, sizeof(full), dirname);
+    printf("[readDir] opening '%s'\n", full);
+    DIR *dir = opendir(full);
+    if (!dir) { printf("[readDir] failed to open\n"); return 0; }
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+      if (entry->d_name[0] == '.') continue;
+      bool isFile = (entry->d_type == DT_REG);
+      if (entry->d_type == DT_UNKNOWN) {
+        // Emscripten FS may return DT_UNKNOWN — fall back to stat
+        char child[512];
+        snprintf(child, sizeof(child), "%s/%s", full, entry->d_name);
+        struct stat st;
+        isFile = (stat(child, &st) == 0 && S_ISREG(st.st_mode));
+      }
+      if (isFile) out.push_back(entry->d_name);
+    }
+    closedir(dir);
+#else
+    File root = SD.open(dirname);
+    if (!root || !root.isDirectory()) return 0;
+    File file = root.openNextFile();
+    while (file) {
+      if (!file.isDirectory()) out.push_back(file.name());
+      file = root.openNextFile();
+    }
+#endif
+    return (int)out.size();
+  }
+
   bool createDir(const char *path) {
 #ifdef SDL_h_
     char full[512]; _path(full, sizeof(full), path);
-    return mkdir(full, 0755) == 0;
+    // create each component in turn
+    for (char *p = full + 1; *p; p++) {
+      if (*p == '/') {
+        *p = '\0';
+        mkdir(full, 0755);
+        *p = '/';
+      }
+    }
+    return mkdir(full, 0755) == 0 || errno == EEXIST;
 #else
     return SD.mkdir(path);
 #endif
@@ -141,6 +186,7 @@ public:
   bool write(const char *path, const uint8_t *buf, size_t bufsz) {
 #ifdef SDL_h_
     char full[512]; _path(full, sizeof(full), path);
+    printf("[write] '%s'\n", full);
     FILE *f = fopen(full, "wb");
     if (!f) return false;
     bool ok = fwrite(buf, 1, bufsz, f) == bufsz;
@@ -198,7 +244,11 @@ public:
 private:
 #ifdef SDL_h_
   static void _path(char *out, size_t outsz, const char *path) {
+#ifdef __EMSCRIPTEN__
+    snprintf(out, outsz, "/sdcard%s", path);
+#else
     snprintf(out, outsz, "sdcard%s", path);
+#endif
   }
 
   static void _sync() {

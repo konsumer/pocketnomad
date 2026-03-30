@@ -8,13 +8,35 @@
 	<script type="module">
 		import loadFW from './index.mjs'
 		const canvas = document.getElementById('canvas');
-		const m = await loadFW({ canvas })
+
+		// Load module with noInitialRun, sync IDBFS, then call main manually
+		// so persisted files are visible before setup() runs.
+		const m = await new Promise((resolve, reject) => {
+			loadFW({
+				canvas,
+				noInitialRun: true,
+				onRuntimeInitialized() {
+					this.FS.syncfs(true, (err) => {
+						if (err) console.warn('IDBFS populate error:', err);
+						this.callMain([]);
+						resolve(this);
+					});
+				}
+			});
+		});
 
 		// You can use web APIs to test things
 
 		// LoRa
 		m.loraOut = bytes => console.log('LoRa sent:', bytes)
-		m.loraInject(new TextEncoder().encode("Hello from web."))
+
+		// real traffic captured between 2 clients
+		
+		// ANNOUNCE (072ec44973a8dee8e28d230fb4af8fe4)
+		m.loraInject(Uint8Array.fromHex('2100072ec44973a8dee8e28d230fb4af8fe400a2b9b02fb4749fcf8458762d1be0ae67ff1caa47fb0a52f4c2bd6dd07860a738da50a87f884e6e64aaa70b44d20868144e3e26ffa001c60a7c797dbae5078ece6ec60bc318e2c0f0d90873408275530068de1039e2bb21108b2cbc900b476290ab7867441446db366a70fb8ed1448ca0e889bd65bad6d8654e72661ddc089b06495ab91a57afc5700e095f021aa8cec04f22ba55438efc3ab1e2a91b8d17bd259313f175dff040827fdf1111c88bef501676380b92c40e416e6f6e796d6f75732050656572c0'))
+
+		// ANNOUNCE (76a93cda889a8c0a88451e02d53fd8b9)
+		m.loraInject(Uint8Array.fromHex('210076a93cda889a8c0a88451e02d53fd8b90071f199f04d3589ca083c66ff91baed628ee19517ef68eb209827df3a6785cf5b0af43fb0e168176370828fcdc199e5ae2b208b57cf65179ffa8f25733d9d40bc6ec60bc318e2c0f0d908149ad525040068de103b0df6d220011ce9da7559fbd620380501d9e19afce87a6d0c661412f3831cc915dbecabe89ef5a11a359d3757a85280c3ae68a8b6366ed4110be24a408dbe946b2815e0e89f8e49848978122b30e442af83b36cef11d3df69c34189156858560292c40e416e6f6e796d6f75732050656572c0'))
 
 		// Power — set simulated battery state (read each frame by c.batteryLevel() etc.)
 		m.batteryLevel   = 85      // 0–100 %

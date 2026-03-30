@@ -10,16 +10,25 @@ OUTDIR=web
 LIBSRC=".pio/libdeps/native/M5GFX/src"
 INCLUDES="-I $LIBSRC -I .pio/libdeps/native/Reticulum -I .pio/libdeps/native/Crypto"
 DEFINES="-D __EMSCRIPTEN__ -D LGFX_USE_SDL -D M5GFX_BOARD=board_M5Cardputer -s USE_SDL=2"
-EMFLAGS="-s USE_SDL=2 -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s FORCE_FILESYSTEM=1 -lidbfs.js --pre-js scripts/pre.js -s EXPORTED_FUNCTIONS=['_main','_malloc','_free'] -s EXPORTED_RUNTIME_METHODS=['HEAPU8'] -Wl,--export-if-defined=cardputerLoraInject -Wl,--export-if-defined=cardputerGpsSet -Wl,--export-if-defined=cardputerMotionSet"
+EMFLAGS=(
+  -s USE_SDL=2
+  -s WASM=1
+  -s ALLOW_MEMORY_GROWTH=1
+  -s FORCE_FILESYSTEM=1
+  -lidbfs.js
+  --pre-js scripts/pre.js
+  -s EXPORTED_FUNCTIONS='["_main","_malloc","_free"]'
+  -s EXPORTED_RUNTIME_METHODS='["HEAPU8","callMain","FS"]'
+  -Wl,--export-if-defined=cardputerLoraInject
+  -Wl,--export-if-defined=cardputerGpsSet
+  -Wl,--export-if-defined=cardputerMotionSet
+)
 
 # In release mode add SINGLE_FILE so the page is self-contained
 if [[ "$1" == "--release" ]]; then
-  EMFLAGS="$EMFLAGS -s SINGLE_FILE=1"
-  OUT="$OUTDIR/index.mjs"
-else
-  # Dev: separate .wasm file so browser can cache it between rebuilds
-  OUT="$OUTDIR/index.mjs"
+  EMFLAGS+=(-s SINGLE_FILE=1)
 fi
+OUT="$OUTDIR/index.mjs"
 
 mkdir -p "$LIBDIR"
 
@@ -52,6 +61,6 @@ for src in src/*.cpp; do
 done
 
 echo "==> Linking -> $OUT"
-emcc "${OBJS[@]}" "${SRC_OBJS[@]}" -o "$OUT" $EMFLAGS
+emcc "${OBJS[@]}" "${SRC_OBJS[@]}" -o "$OUT" "${EMFLAGS[@]}"
 
 echo "==> Done."
