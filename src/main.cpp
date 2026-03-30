@@ -1,8 +1,12 @@
 #include "theme.h"
 #include "Counter.h"
+#include "hal/Cardputer.h"
+#include "hal/CardputerTask.h"
 
 #include "PocketNomad.h"
 
+Cardputer c;
+CardputerTaskManager tasks;
 PocketNomad nomad;
 
 #include "Tab.h"
@@ -17,13 +21,28 @@ std::vector<Tab*> tabs = {
 };
 Counter currentTab(tabs.size());
 
+int batteryLevel = 0;
+int chargingState = 3;
+CardputerTask taskBattery;
+
 void setup(void) {
+  c.setup();
   nomad.setup();
   tabs[currentTab]->setup();
+  tasks.setup();
+
+  // setup task to periodically update battery indicators
+  taskBattery.start("battery", 2048, []() {
+    chargingState = c.chargingState();
+    batteryLevel = c.batteryLevel();
+    CardputerTask::delay(2000);
+  }, &tasks);
 }
 
 void loop(void) {
+  c.loop();
   nomad.loop();
+  tasks.update();
 
   tabs[currentTab]->update();
 
@@ -53,13 +72,13 @@ void loop(void) {
 
   // show battery indicator
   c.fillRoundRect(c.width() - 24, 4, 20, 10, 3, THEME_BATTERY_BG);
-  c.fillRoundRect(c.width() - 23, 5, 18 * (nomad.level/100), 8, 3, THEME_BATTERY_FG);
+  c.fillRoundRect(c.width() - 23, 5, 18 * (batteryLevel/100.0f), 8, 3, THEME_BATTERY_FG);
   c.setTextColor(THEME_BATTERY_FG);
   c.setTextSize(1);
   c.setCursor(c.width() - 32, 5);
-  if (nomad.chargingState == 0) {
+  if (chargingState == 0) {
     c.print("D"); // discharging
-  } else if (nomad.chargingState == 1) {
+  } else if (chargingState == 1) {
     c.print("C"); // charging
   } else {
     c.print("?");
