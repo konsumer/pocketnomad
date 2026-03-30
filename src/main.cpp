@@ -50,4 +50,19 @@ void loop(void) {
   if (right && !prevRight) { ++currentTab; tabs[currentTab]->setup(); }
   prevLeft  = left;
   prevRight = right;
+
+  // show battery indicator
+  c.fillRect(c.width() - 24, 4, 20, 10, THEME_BATTERY_BG);
+  c.fillRect(c.width() - 23, 5, 18 * (nomad.level/100), 8, THEME_BATTERY_FG);
+  c.setTextColor(THEME_BATTERY_FG);
+  c.setTextSize(1);
+  c.setCursor(c.width() - 32, 4);
+  if (nomad.chargingState == 0) {
+    c.print("D"); // discharging
+  } else if (nomad.chargingState == 1) {
+    c.print("C"); // charging
+  } else {
+    c.print("?");
+  }
 }
+
