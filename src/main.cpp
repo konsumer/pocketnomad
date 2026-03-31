@@ -9,6 +9,16 @@ Cardputer c;
 CardputerTaskManager tasks;
 PocketNomad nomad;
 
+// Draws an upward pointing triangle
+void drawScrollUp(int x, int y, int w = 6, int h = 6) {
+  c.fillTriangle(x + w/2, y, x, y + h, x + w, y + h, THEME_SCROLL);
+}
+
+// Draws a downward pointing triangle
+void drawScrollDown(int x, int y, int w = 6, int h = 6) {
+  c.fillTriangle(x, y, x + w, y, x + w/2, y + h, THEME_SCROLL);
+}
+
 #include "Tab.h"
 #include "TabHome.h"
 #include "TabMessages.h"

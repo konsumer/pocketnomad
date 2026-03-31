@@ -13,7 +13,7 @@ public:
 
     const int LINE_H   = 10;
     const int TAB_BAR  = 16;
-    const int TOP_PAD  = 2;
+    const int TOP_PAD  = 16;
     const int visible  = (c.height() - TAB_BAR - TOP_PAD) / LINE_H;
     const int count    = (int)nomad.peers.size();
 
@@ -39,12 +39,10 @@ public:
 
     // scroll indicators
     if (_scroll > 0) {
-      c.setCursor(c.width() - 8, TOP_PAD);
-      c.print("^");
+      drawScrollUp(c.width() - 12, TOP_PAD);
     }
     if (_scroll < maxScroll) {
-      c.setCursor(c.width() - 8, TOP_PAD + (visible - 1) * LINE_H);
-      c.print("v");
+      drawScrollDown(c.width() - 12, TOP_PAD + (visible - 1) * LINE_H);
     }
 
     // edge-triggered up/down scroll
@@ -61,3 +59,4 @@ private:
   bool _prevUp   = false;
   bool _prevDown = false;
 };
+
