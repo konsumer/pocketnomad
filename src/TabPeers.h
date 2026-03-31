@@ -3,66 +3,30 @@ public:
   TabPeers() : Tab("Peers") {}
 
   void setup() override {
-    _scroll = 0;
+    _selected = 0;
+    _scroll   = 0;
   }
 
   void update() override {
     c.clear(THEME_BG);
-    c.setTextSize(1.0);
+    c.setTextSize(1);
 
-    const int LINE_H   = 10;
-    const int TAB_BAR  = 16;
-    const int TOP_PAD  = 16;
-    const int visible  = (c.height() - TAB_BAR - TOP_PAD) / LINE_H;
-    const int count    = (int)nomad.peers.size();
-
-    // clamp scroll
-    int maxScroll = count - visible;
-    if (maxScroll < 0) maxScroll = 0;
-    if (_scroll > maxScroll) _scroll = maxScroll;
-    if (_scroll < 0)         _scroll = 0;
-
-    if (count == 0) {
-      c.setCursor(4, TOP_PAD);
-      c.print("No peers yet.");
-      return;
-    }
-
-    for (int i = 0; i < visible && (_scroll + i) < count; i++) {
-      if (i == _activePeer) {
-        c.setTextColor(THEME_SELECTED_FG);
-        c.fillRoundRect(2, TOP_PAD + i * LINE_H-1, 198, 10, 3, THEME_SELECTED_BG);
-      } else {
-        c.setTextColor(THEME_FG);
+    if (showTabs) {
+      std::vector<std::string> items;
+      for (const auto& peer : nomad.peers) {
+        char hex[33];
+        for (int b = 0; b < 16; b++) snprintf(hex + b*2, 3, "%02x", peer[b]);
+        items.push_back(hex);
       }
-      const auto& peer = nomad.peers[_scroll + i];
-      c.setCursor(4, TOP_PAD + i * LINE_H);
-      char hex[33];
-      for (int b = 0; b < 16; b++) snprintf(hex + b*2, 3, "%02x", peer[b]);
-      c.print(hex);
-    }
 
-    // scroll indicators
-    if (_scroll > 0) {
-      drawScrollUp(c.width() - 12, TOP_PAD);
+      if (drawList(items, _selected, _scroll)) {
+        conv.open(_selected);
+        showTabs = false;
+      }
     }
-    if (_scroll < maxScroll) {
-      drawScrollDown(c.width() - 12, TOP_PAD + (visible - 1) * LINE_H);
-    }
-
-    // edge-triggered up/down scroll
-    bool up   = c.isKeyPressed(KEY_UP);
-    bool down = c.isKeyPressed(KEY_DOWN);
-    if (up   && !_prevUp)   _scroll--;
-    if (down && !_prevDown) _scroll++;
-    _prevUp   = up;
-    _prevDown = down;
   }
 
 private:
-  int _activePeer = 0;
-  int  _scroll   = 0;
-  bool _prevUp   = false;
-  bool _prevDown = false;
+  int _selected = 0;
+  int _scroll   = 0;
 };
-
