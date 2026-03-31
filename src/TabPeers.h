@@ -8,7 +8,6 @@ public:
 
   void update() override {
     c.clear(THEME_BG);
-    c.setTextColor(THEME_FG);
     c.setTextSize(1.0);
 
     const int LINE_H   = 10;
@@ -30,6 +29,12 @@ public:
     }
 
     for (int i = 0; i < visible && (_scroll + i) < count; i++) {
+      if (i == _activePeer) {
+        c.setTextColor(THEME_SELECTED_FG);
+        c.fillRoundRect(2, TOP_PAD + i * LINE_H-1, 198, 10, 3, THEME_SELECTED_BG);
+      } else {
+        c.setTextColor(THEME_FG);
+      }
       const auto& peer = nomad.peers[_scroll + i];
       c.setCursor(4, TOP_PAD + i * LINE_H);
       char hex[33];
@@ -55,6 +60,7 @@ public:
   }
 
 private:
+  int _activePeer = 0;
   int  _scroll   = 0;
   bool _prevUp   = false;
   bool _prevDown = false;

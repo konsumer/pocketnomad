@@ -29,7 +29,7 @@ std::vector<Tab*> tabs = {
   new TabMessages(),
   new TabPeers(),
 };
-Counter currentTab(tabs.size());
+Counter currentTab(tabs.size(), 2);
 
 int batteryLevel = 0;
 int chargingState = 3;
