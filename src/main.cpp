@@ -52,14 +52,14 @@ bool drawList(const std::vector<std::string>& items, int& selected, int& scroll)
       c.print(items[idx].c_str());
     }
     if (scroll > 0) {
-      c.setTextColor(THEME_FG);
-      c.setCursor(c.width() - 8, HEIGHT_HEADER);
-      c.print("^");
+      int x = c.width() - 12;
+      int y = HEIGHT_HEADER;
+      c.fillTriangle(x+3, y, x, y+5, x+6, y+5, THEME_SCROLL);
     }
     if (scroll + visible < count) {
-      c.setTextColor(THEME_FG);
-      c.setCursor(c.width() - 8, HEIGHT_HEADER + (visible - 1) * LINE_H);
-      c.print("v");
+      int x = c.width() - 12;
+      int y = HEIGHT_HEADER + (visible - 1) * LINE_H;
+      c.fillTriangle(x, y, x+6, y, x+3, y+5, THEME_SCROLL);
     }
   }
 
