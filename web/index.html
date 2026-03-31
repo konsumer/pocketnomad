@@ -6,6 +6,26 @@
 		<canvas id="canvas"></canvas>
 	</body>
 	<script type="module">
+		import {
+		  private_identity,
+		  public_identity,
+		  private_ratchet,
+		  public_ratchet,
+		  packet_unpack,
+		  build_announce,
+		  build_data,
+		  build_proof,
+		  validate_announce,
+		  validate_proof,
+		  message_decrypt,
+		  lxmf_parse,
+		  lxmf_build,
+		  get_identity_destination_hash,
+		  PACKET_DATA,
+		  PACKET_ANNOUNCE,
+		  PACKET_PROOF
+		} from 'https://esm.sh/nomadnet@0.0.5'
+
 		import loadFW from './index.mjs'
 		const canvas = document.getElementById('canvas');
 
@@ -30,6 +50,11 @@
 		// LoRa
 		m.loraOut = bytes => console.log('LoRa sent:', bytes)
 
+		// Power — set simulated battery state (read each frame by c.batteryLevel() etc.)
+		m.batteryLevel   = 85      // 0–100 %
+		m.batteryVoltage = 3900    // mV
+		m.isCharging     = false
+
 		// real traffic captured between 2 clients
 		
 		// ANNOUNCE (072ec44973a8dee8e28d230fb4af8fe4)
@@ -53,9 +78,24 @@
 		// PROOF (d7c0e833f0cbde9f9133cd9e7d508b1a)
 		m.loraInject(Uint8Array.fromHex('0300d7c0e833f0cbde9f9133cd9e7d508b1a00cd00ce237471609d6ef64e427151fed46d9eb71fe6337f6fc530a9f3a55c730f1fd09f82f7d12d1caadbc185b7703f0d9f5db6c792c2dfcdf1eed3111088860c'))
 
-		// Power — set simulated battery state (read each frame by c.batteryLevel() etc.)
-		m.batteryLevel   = 85      // 0–100 %
-		m.batteryVoltage = 3900    // mV
-		m.isCharging     = false
+		const identity = {ratchet: {}}
+		if (localStorage.privatekey) {
+			identity.private = Uint8Array.fromHex(localStorage.privatekey)
+		} else {
+			identity.private = private_identity()
+			localStorage.privatekey = identity.private.toHex()
+		}
+		identity.public = public_identity(identity.private)
+		identity.destination = get_identity_destination_hash(identity.public)
+		identity.address = identity.destination.toHex()
+		
+
+		const pkt = build_announce(identity.private)
+		m.loraInject(pkt)
+		const packet = packet_unpack(pkt)
+		const announce = validate_announce(packet)
+		console.log({identity, announce, packet})
+
+
 	</script>
 </html>
