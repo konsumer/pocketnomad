@@ -1,8 +1,3 @@
-.DS_Store
 .pio/
-*.dat
-web/index.mjs
-web/index.wasm
-package-lock.json
-node_modules/
-sdcard/
+.DS_Store
+.claude/
