@@ -1,6 +1,8 @@
 #include "ui.h"
 #include "theme.h"
 
+#include <algorithm>
+
 static M5Canvas* _cv = nullptr;
 
 void UiInit(M5Canvas* canvas) {
@@ -60,6 +62,70 @@ static UiKey readKey(bool textMode) {
 
 // ─── Drawing helpers ──────────────────────────────────────────────────────────
 
+enum class UiTextAlign { Left, Center };
+
+static std::vector<std::string> wrapTextLines(const std::string& text, int maxWidth) {
+    std::vector<std::string> lines;
+    if (text.empty()) return lines;
+    if (_cv == nullptr || maxWidth <= 0) {
+        lines.push_back(text);
+        return lines;
+    }
+
+    std::string current;
+    auto flush = [&](bool forceEmpty) {
+        if (!current.empty() || forceEmpty) {
+            lines.push_back(current);
+            current.clear();
+        }
+    };
+
+    size_t i = 0;
+    while (i < text.size()) {
+        char ch = text[i];
+        if (ch == '\n') {
+            flush(true);
+            ++i;
+            continue;
+        }
+
+        size_t start = i;
+        while (i < text.size() && text[i] != ' ' && text[i] != '\n') {
+            ++i;
+        }
+
+        std::string word = text.substr(start, i - start);
+        std::string candidate = current.empty() ? word : current + " " + word;
+
+        if (_cv->textWidth(candidate.c_str()) <= maxWidth || current.empty()) {
+            current = std::move(candidate);
+        } else {
+            flush(false);
+            current = word;
+        }
+
+        if (i < text.size() && text[i] == ' ') ++i;
+    }
+
+    flush(false);
+    if (lines.empty()) lines.push_back(current);
+    return lines;
+}
+
+static int drawWrappedLines(const std::vector<std::string>& lines, int x, int y, UiTextAlign align) {
+    int drawn = 0;
+    for (const auto& line : lines) {
+        if (align == UiTextAlign::Center) {
+            _cv->drawCenterString(line.c_str(), x, y);
+        } else {
+            _cv->drawString(line.c_str(), x, y);
+        }
+        y += UI_LINE_H;
+        drawn += UI_LINE_H;
+    }
+    return drawn;
+}
+
 static void drawTabBar(const std::vector<UiTab>& tabs, int selected) {
     int n = (int)tabs.size();
     if (n == 0) return;
@@ -100,13 +166,16 @@ static void drawList(const std::vector<UiItem>& items, int scroll, int selected)
         _cv->setTextColor(active ? THEME_MENU_ACTIVE_FG : THEME_FG);
         _cv->drawString(items[idx].label.c_str(), 4, y + 3);
 
-        // right-side indicator: submenu arrow takes priority over hint
+        // right-side indicator: submenu arrow takes priority over hint/hintFn
         if (!items[idx].submenu.empty()) {
             _cv->setTextColor(active ? THEME_MENU_ACTIVE_FG : THEME_HINT);
             _cv->drawRightString(">", UI_SCREEN_W - 4, y + 3);
-        } else if (!items[idx].hint.empty()) {
-            _cv->setTextColor(active ? THEME_MENU_ACTIVE_FG : THEME_HINT);
-            _cv->drawRightString(items[idx].hint.c_str(), UI_SCREEN_W - 4, y + 3);
+        } else {
+            std::string h = items[idx].hintFn ? items[idx].hintFn() : items[idx].hint;
+            if (!h.empty()) {
+                _cv->setTextColor(active ? THEME_MENU_ACTIVE_FG : THEME_HINT);
+                _cv->drawRightString(h.c_str(), UI_SCREEN_W - 4, y + 3);
+            }
         }
     }
 
@@ -126,7 +195,10 @@ void UiFatalError(const char* msg) {
     _cv->fillScreen(THEME_ERROR_BG);
     _cv->setTextSize(1);
     _cv->setTextColor(THEME_ERROR_FG);
-    _cv->drawCenterString(msg, UI_SCREEN_W / 2, UI_SCREEN_H / 2 - 4);
+    auto lines      = wrapTextLines(msg ? msg : "", UI_SCREEN_W - 12);
+    int blockHeight = (int)lines.size() * UI_LINE_H;
+    int startY      = (UI_SCREEN_H - blockHeight) / 2;
+    drawWrappedLines(lines, UI_SCREEN_W / 2, startY, UiTextAlign::Center);
     _cv->pushSprite(0, 0);
     while (true) delay(1000);
 }
@@ -134,12 +206,15 @@ void UiFatalError(const char* msg) {
 void UiMsgBox(const char* title, const char* body) {
     _cv->fillScreen(THEME_BG);
     _cv->setTextSize(1);
-    int y = body ? 30 : UI_SCREEN_H / 2 - 4;
+    auto titleLines = wrapTextLines(title ? title : "", UI_SCREEN_W - 12);
+    int titleHeight = (int)titleLines.size() * UI_LINE_H;
+    int y           = body ? 30 : (UI_SCREEN_H - titleHeight) / 2;
     _cv->setTextColor(THEME_TITLE);
-    _cv->drawCenterString(title, UI_SCREEN_W / 2, y);
+    drawWrappedLines(titleLines, UI_SCREEN_W / 2, y, UiTextAlign::Center);
     if (body) {
+        auto bodyLines = wrapTextLines(body, UI_SCREEN_W - 12);
         _cv->setTextColor(THEME_FG);
-        _cv->drawCenterString(body, UI_SCREEN_W / 2, 60);
+        drawWrappedLines(bodyLines, UI_SCREEN_W / 2, y + titleHeight + 10, UiTextAlign::Center);
     }
     _cv->pushSprite(0, 0);
     // wait for any key
@@ -156,12 +231,17 @@ static std::string doTextInput(const char* label, std::string val, bool mask) {
         _cv->fillScreen(THEME_BG);
         _cv->setTextSize(1);
         _cv->setTextColor(THEME_TITLE);
-        _cv->drawCenterString(label, UI_SCREEN_W / 2, 30);
+        auto labelLines = wrapTextLines(label ? label : "", UI_SCREEN_W - 12);
+        int labelHeight = drawWrappedLines(labelLines, UI_SCREEN_W / 2, 20, UiTextAlign::Center);
         _cv->setTextColor(THEME_FG);
         std::string shown = (mask ? std::string(val.size(), '*') : val) + '_';
-        _cv->drawString(shown.c_str(), 4, 55);
+        int inputY       = std::max(55, 20 + labelHeight + 10);
+        _cv->drawString(shown.c_str(), 4, inputY);
         _cv->setTextColor(THEME_HINT);
-        _cv->drawCenterString("OPT=cancel  ENTER=ok", UI_SCREEN_W / 2, UI_SCREEN_H - 12);
+        auto hintLines = wrapTextLines("OPT=cancel  ENTER=ok", UI_SCREEN_W - 12);
+        int hintHeight = (int)hintLines.size() * UI_LINE_H;
+        int hintY      = UI_SCREEN_H - hintHeight - 8;
+        drawWrappedLines(hintLines, UI_SCREEN_W / 2, hintY, UiTextAlign::Center);
         _cv->pushSprite(0, 0);
     };
     redraw();
@@ -180,6 +260,56 @@ std::string UiTextInput(const char* label, const char* initial) {
 
 std::string UiPasswordInput(const char* label) {
     return doTextInput(label, "", true);
+}
+
+int UiPicker(const char* label, std::vector<std::string> options, int current) {
+    int sel = (current >= 0 && current < (int)options.size()) ? current : 0;
+    const int listY = UI_LINE_H + 4;
+    const int listH = UI_SCREEN_H - listY - UI_LINE_H;
+    const int vis   = listH / UI_LINE_H;
+    int scroll = std::max(0, sel - vis / 2);
+
+    auto redraw = [&]() {
+        _cv->fillScreen(THEME_BG);
+        _cv->setTextSize(1);
+        _cv->setTextColor(THEME_TITLE);
+        _cv->drawCenterString(label, UI_SCREEN_W / 2, 2);
+        _cv->drawFastHLine(0, UI_LINE_H + 1, UI_SCREEN_W, THEME_HINT);
+        for (int i = 0; i < vis && (i + scroll) < (int)options.size(); i++) {
+            int idx    = i + scroll;
+            int y      = listY + i * UI_LINE_H;
+            bool active = (idx == sel);
+            _cv->fillRect(0, y, UI_SCREEN_W, UI_LINE_H, active ? THEME_MENU_ACTIVE_BG : THEME_BG);
+            _cv->setTextColor(active ? THEME_MENU_ACTIVE_FG : THEME_FG);
+            if (idx == current) _cv->drawString("*", 2, y + 3);
+            _cv->drawString(options[idx].c_str(), 14, y + 3);
+        }
+        _cv->setTextColor(THEME_HINT);
+        if (scroll > 0)
+            _cv->drawRightString("^", UI_SCREEN_W - 1, listY + 2);
+        if (scroll + vis < (int)options.size())
+            _cv->drawRightString("v", UI_SCREEN_W - 1, listY + (vis - 1) * UI_LINE_H + 2);
+        _cv->drawCenterString("OPT=cancel  ENTER=ok", UI_SCREEN_W / 2, UI_SCREEN_H - UI_LINE_H + 3);
+        _cv->pushSprite(0, 0);
+    };
+    redraw();
+
+    while (true) {
+        UiKey k = readKey(false);
+        if (k.up && sel > 0) {
+            sel--;
+            if (sel < scroll) scroll = sel;
+            redraw();
+        } else if (k.down && sel < (int)options.size() - 1) {
+            sel++;
+            if (sel >= scroll + vis) scroll = sel - vis + 1;
+            redraw();
+        } else if (k.ok) {
+            return sel;
+        } else if (k.back) {
+            return current;
+        }
+    }
 }
 
 // ─── Tab navigator ────────────────────────────────────────────────────────────
@@ -225,12 +355,18 @@ void UiTabs(std::vector<UiTab>& tabs, int initial) {
                 redraw();
             }
         } else if (k.ok && n > 0) {
-            auto& item = (*f.items)[f.selected];
-            if (!item.submenu.empty()) {
-                stack.push_back({&item.submenu, 0, 0});
+            if (!(*f.items)[f.selected].submenu.empty()) {
+                stack.push_back(NavFrame(&(*f.items)[f.selected].submenu, 0, 0));
                 redraw();
-            } else if (item.action) {
-                item.action();
+            } else if ((*f.items)[f.selected].action) {
+                // Copy action before calling: the action may rebuild f.items,
+                // which would destroy the original std::function while it executes.
+                auto action = (*f.items)[f.selected].action;
+                action();
+                // Clamp selection in case the rebuild shortened the list
+                int newN = (int)f.items->size();
+                if (f.selected >= newN) f.selected = std::max(0, newN - 1);
+                if (f.scroll > f.selected) f.scroll = f.selected;
                 redraw();
             }
         } else if (k.back) {
@@ -264,12 +400,16 @@ bool UiConfirm(const char* question, const char* body) {
     auto redraw = [&]() {
         _cv->fillScreen(THEME_BG);
         _cv->setTextSize(1);
-        int y = body ? 30 : UI_SCREEN_H / 2 - 4;
+        auto questionLines = wrapTextLines(question ? question : "", UI_SCREEN_W - 12);
+        int questionHeight = (int)questionLines.size() * UI_LINE_H;
+        int contentHeight  = UI_SCREEN_H - UI_TABS_H;
+        int y              = body ? 30 : (contentHeight - questionHeight) / 2;
         _cv->setTextColor(THEME_TITLE);
-        _cv->drawCenterString(question, UI_SCREEN_W / 2, y);
+        drawWrappedLines(questionLines, UI_SCREEN_W / 2, y, UiTextAlign::Center);
         if (body) {
+            auto bodyLines = wrapTextLines(body, UI_SCREEN_W - 12);
             _cv->setTextColor(THEME_FG);
-            _cv->drawCenterString(body, UI_SCREEN_W / 2, 60);
+            drawWrappedLines(bodyLines, UI_SCREEN_W / 2, y + questionHeight + 10, UiTextAlign::Center);
         }
         drawTabBar(tabs, confirmed ? 1 : 0);
          _cv->pushSprite(0, 0);
@@ -293,6 +433,9 @@ void UiPleaseWait() {
     _cv->fillScreen(THEME_BG);
     _cv->setTextColor(THEME_HINT);
     _cv->setTextSize(1);
-    _cv->drawCenterString("Please wait...", _cv->width() / 2, _cv->height() / 2 - 4);
+    auto lines      = wrapTextLines("Please wait...", _cv->width() - 12);
+    int blockHeight = (int)lines.size() * UI_LINE_H;
+    int startY      = (_cv->height() - blockHeight) / 2;
+    drawWrappedLines(lines, _cv->width() / 2, startY, UiTextAlign::Center);
     _cv->pushSprite(0, 0);
 }

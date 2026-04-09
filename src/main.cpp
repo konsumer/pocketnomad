@@ -29,6 +29,7 @@ struct IdentityBlob {
 
 #include "theme.h"
 #include "ui.h"
+#include "settings.h"
 
 using namespace RNS::Utilities;
 
@@ -77,11 +78,6 @@ static void loraEnable() {
 	}
 }
 
-static void action_delete_user() {
-	if (UiConfirm("Delete your identity?", "This will completely remove your identity and messages from this device.")) {
-		UiMsgBox("Deleted!", "Now, I will reboot, and you can setup a new identity.");
-	}
-}
 
 void setup() {
 	auto cfg = M5.config();
@@ -150,25 +146,20 @@ void setup() {
 
 	// now we have username / identity
 
-	// TODO: load settings from disk
+	loadSettings();
 
-	// TODO: setup reticulum with lora and/or tcp/udp over wifi.
-
+	// TODO: setup reticulum with lora and/or tcp/udp over wifi (use settings.radio_* / settings.wifi_*)
 	// TODO: setup FreeRTOS task for periodic ANNOUNCE send
 	// TODO: setup FreeRTOS task for logging incoming ANNOUNCE to disk, as peers
 	// TODO: setup FreeRTOS task for logging incoming MESSAGEs (to user) to disk
 
-	// placeholder tabs until the real screens are wired up
 	static std::vector<UiTab> tabs = {
 	    {"Home",     {}},
 	    {"Messages", {}},
 	    {"Peers",    {}},
-	    {"Settings", {
-	        { "Wipe", "Delete yourself", {}, action_delete_user },
-	        { "Lora", "Local Radio" },
-	        { "Internet", "All over" },
-	    }},
+	    {"Settings", {}},
 	};
+	initSettings(tabs[3].items);  // builds + owns the Settings items list
 	UiTabs(tabs);
 }
 
