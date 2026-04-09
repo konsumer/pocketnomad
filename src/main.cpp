@@ -28,12 +28,14 @@ struct IdentityBlob {
 #include <microStore/Adapters/UniversalFileSystem.h>
 
 #include "theme.h"
+#include "ui.h"
+
+using namespace RNS::Utilities;
 
 // 40MHz high-speed: lower if there are issues
 #define SD_SPEED 40000000
 
 // CardputerADV SPI bus (SD card + LoRa share this bus)
-// From M5Unified _pin_table_spi_sd for board_M5CardputerADV
 #define SPI_SCK  40
 #define SPI_MOSI 14
 #define SPI_MISO 39
@@ -49,51 +51,36 @@ M5Canvas canvas(&M5Cardputer.Display);
 microStore::FileSystem filesystem{microStore::Adapters::UniversalFileSystem()};
 SPIClass spi(FSPI);
 
-// this is used to detect 1262, and enable it's radio-hardware
 m5::PI4IOE5V6408_Class ioe(0x43, 400000, &m5::In_I2C);
 
 std::string username = "";
 RNS::Identity identity;
 
-// just draw the logo
-void draw_logo(int y=canvas.height()/2 - 10) {
+static void showBoot(const char* subtitle) {
+	canvas.fillScreen(THEME_BG);
 	canvas.setTextColor(GREEN);
 	canvas.setTextSize(2);
-	canvas.drawCenterString("pocketnomad", canvas.width() / 2, y);
+	canvas.drawCenterString("pocketnomad", canvas.width() / 2, 10);
 	canvas.setTextSize(1);
 	canvas.setTextColor(THEME_FG);
-}
-
-// get input-text, wait for OK
-bool get_input(std::string& var) {
-    if (!M5Cardputer.Keyboard.isChange()) return false;
-    if (!M5Cardputer.Keyboard.isPressed()) return false;
-    auto status = M5Cardputer.Keyboard.keysState();
-    
-    if (status.enter) {
-        return !var.empty(); 
-    }
-    
-    if (status.del) {
-        if (!var.empty()) {
-            var.pop_back();
-        }
-    } else {
-        for (auto& c : status.word) {
-            var += c;
-        }
-    }
-    
-    return false;
-}
-
-// show full-screen red message, and block
-void fatal_error(std::string msg) {
-	canvas.fillScreen(THEME_ERROR_BG);
-	canvas.setTextColor(THEME_ERROR_FG);
-	canvas.drawCenterString(msg.c_str(), canvas.width() / 2, canvas.height() / 2 - 5);
+	canvas.drawCenterString(subtitle, canvas.width() / 2, 40);
 	canvas.pushSprite(0, 0);
-	while(1) { delay(1000); }
+}
+
+static void loraEnable() {
+	if (ioe.begin()) {
+		ioe.setDirection(0, true);
+		ioe.setHighImpedance(0, false);
+		ioe.digitalWrite(0, true);
+	} else {
+		UiFatalError("LORA error.");
+	}
+}
+
+static void action_delete_user() {
+	if (UiConfirm("Delete your identity?", "This will completely remove your identity and messages from this device.")) {
+		UiMsgBox("Deleted!", "Now, I will reboot, and you can setup a new identity.");
+	}
 }
 
 void setup() {
@@ -101,101 +88,51 @@ void setup() {
 	M5Cardputer.begin(cfg);
 	M5Cardputer.Display.setRotation(1);
 	canvas.createSprite(M5Cardputer.Display.width(), M5Cardputer.Display.height());
+	UiInit(&canvas);
 
-	canvas.fillScreen(THEME_BG);
-	draw_logo();
-	canvas.pushSprite(0, 0);
+	showBoot("Starting up...");
 
 	// Shared SPI bus: SD and LoRa share MISO/MOSI/SCK, each has its own CS
 	pinMode(SD_CS,   OUTPUT); digitalWrite(SD_CS,   HIGH);
 	pinMode(LORA_CS, OUTPUT); digitalWrite(LORA_CS, HIGH);
 	spi.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
-	
-	if (!SD.begin(SD_CS, spi, SD_SPEED)) {
-		fatal_error("SD is required.");
-	}
+
+	if (!SD.begin(SD_CS, spi, SD_SPEED)) UiFatalError("SD is required.");
 
 	filesystem.init();
-    RNS::Utilities::OS::register_filesystem(filesystem);
+	OS::register_filesystem(filesystem);
 
-	if (ioe.begin()) {
-		ioe.setDirection(0, true);
-		ioe.setHighImpedance(0, false);
-		ioe.digitalWrite(0, true);
-	} else {
-		fatal_error("LORA error.");
-	}
+	loraEnable();
 
-	if (!RNS::Utilities::OS::directory_exists("/pocketnomad")) RNS::Utilities::OS::create_directory("/pocketnomad");
-	if (!RNS::Utilities::OS::directory_exists("/pocketnomad/peers")) RNS::Utilities::OS::create_directory("/pocketnomad/peers");
-	if (!RNS::Utilities::OS::directory_exists("/pocketnomad/messages")) RNS::Utilities::OS::create_directory("/pocketnomad/messages");
+	if (!OS::directory_exists("/pocketnomad")) OS::create_directory("/pocketnomad");
+	if (!OS::directory_exists("/pocketnomad/peers")) OS::create_directory("/pocketnomad/peers");
+	if (!OS::directory_exists("/pocketnomad/messages")) OS::create_directory("/pocketnomad/messages");
 
-	std::string password = "";
-
-	if (RNS::Utilities::OS::file_exists("/pocketnomad/identity")) {
+	if (OS::file_exists("/pocketnomad/identity")) {
+		// --- Login ---
 		IdentityBlob blob;
-		bool entered = false;
+		bool wrongPassword = false;
 		while (true) {
-			canvas.fillScreen(THEME_BG);
-			draw_logo(10);
-			canvas.drawCenterString("Welcome back!", canvas.width() / 2, 40);
-			if (entered) {
-				canvas.setTextColor(THEME_ERROR_FG);
-				canvas.drawCenterString("Incorrect password or corrupt file.", canvas.width() / 2, canvas.height() - 14);
-				canvas.setTextColor(THEME_FG);
-			} else {
-				canvas.drawCenterString("This will be required to use the device.", canvas.width() / 2, canvas.height() - 14);
-				entered = true;
-			}
-			canvas.pushSprite(0, 0);
-			
-			while(!get_input(password)) {
-				M5Cardputer.update();
-				canvas.fillRect(4, 80, canvas.width(), 12, THEME_BG);
-				canvas.setCursor(4, 80);
-				canvas.printf("PASSWORD: %s", std::string(password.length(), '*').c_str());
-				canvas.pushSprite(0, 0);
-				delay(10);
-			}
-
-			canvas.fillRect(0, canvas.height() - 14, canvas.width(), 15, THEME_BG);
-			canvas.drawCenterString("Please wait.", canvas.width() / 2, canvas.height() - 14);
-			canvas.pushSprite(0, 0);
-
-			if (password_open("/pocketnomad/identity", password.c_str(), (uint8_t*)&blob, sizeof(blob))) {
-				break;
-			}
-			password = "";
+			showBoot(wrongPassword ? "Incorrect password." : "Welcome back!");
+			std::string password = UiPasswordInput("Password");
+			if (password.empty()) continue;  // cancelled — must enter password to proceed
+			UiPleaseWait();
+			if (password_open("/pocketnomad/identity", password.c_str(), (uint8_t*)&blob, sizeof(blob))) break;
+			wrongPassword = true;
 		}
 		username = std::string(blob.name);
 		identity = RNS::Identity(false);
 		identity.load_private_key(RNS::Bytes(blob.key, 64));
 	} else {
-		username = "Anonymous Peer";
-		canvas.fillScreen(THEME_BG);
-		draw_logo(10);
-		canvas.drawCenterString("We need to setup an account for you.", canvas.width() / 2, 40);
-		canvas.drawCenterString("Other users will see this.", canvas.width() / 2, canvas.height() - 14);
-		while(!get_input(username)) {
-			M5Cardputer.update();
-			canvas.fillRect(4, 80, canvas.width(), 12, THEME_BG);
-			canvas.setCursor(4, 80);
-			canvas.printf("USERNAME: %s", username.c_str());
-			canvas.pushSprite(0, 0);
-			delay(10);
-		}
+		// --- Registration ---
+		showBoot("Let's set up your account.");
+		username = UiTextInput("Username (visible to peers)", "Anonymous Peer");
+		if (username.empty()) username = "Anonymous Peer";
 
-		canvas.fillScreen(THEME_BG);
-		draw_logo(10);
-		canvas.drawCenterString("We need to setup an account for you.", canvas.width() / 2, 40);
-		canvas.drawCenterString("This will be required to use the device.", canvas.width() / 2, canvas.height() - 14);
-		while(!get_input(password)) {
-			M5Cardputer.update();
-			canvas.fillRect(4, 80, canvas.width(), 12, THEME_BG);
-			canvas.setCursor(4, 80);
-			canvas.printf("PASSWORD: %s", std::string(password.length(), '*').c_str());
-			canvas.pushSprite(0, 0);
-			delay(10);
+		std::string password;
+		while (password.empty()) {
+			showBoot("Choose a password.");
+			password = UiPasswordInput("Password");
 		}
 
 		identity = RNS::Identity();
@@ -205,34 +142,37 @@ void setup() {
 		blob.name[sizeof(blob.name) - 1] = '\0';
 		memcpy(blob.key, identity.get_private_key().data(), 64);
 
+		UiPleaseWait();
 		if (!password_protect("/pocketnomad/identity", password.c_str(), (uint8_t*)&blob, sizeof(blob))) {
-			fatal_error("ID save error.");
+			UiFatalError("ID save error.");
 		}
 	}
 
-	// now we have user name/identity
+	// now we have username / identity
 
-	// this is used to detect 1262, and enable it's radio-hardware
-	if (ioe.begin()) {
-		ioe.setDirection(0, true);
-		ioe.setHighImpedance(0, false);
-		ioe.digitalWrite(0, true);
-	}
+	// TODO: load settings from disk
 
-	// TODO: setup reticulum with lora and tcp/udp over wifi. this should follow user config
-	
+	// TODO: setup reticulum with lora and/or tcp/udp over wifi.
+
 	// TODO: setup FreeRTOS task for periodic ANNOUNCE send
 	// TODO: setup FreeRTOS task for logging incoming ANNOUNCE to disk, as peers
 	// TODO: setup FreeRTOS task for logging incoming MESSAGEs (to user) to disk
 
-	// temp: just show that all the setup was completed
-	canvas.fillScreen(DARKGREEN);
-	canvas.setTextColor(GREEN);
-	canvas.drawCenterString("OK", canvas.width() / 2, canvas.height() / 2 - 5);
-	canvas.pushSprite(0, 0);
+	// placeholder tabs until the real screens are wired up
+	static std::vector<UiTab> tabs = {
+	    {"Home",     {}},
+	    {"Messages", {}},
+	    {"Peers",    {}},
+	    {"Settings", {
+	        { "Wipe", "Delete yourself", {}, action_delete_user },
+	        { "Lora", "Local Radio" },
+	        { "Internet", "All over" },
+	    }},
+	};
+	UiTabs(tabs);
 }
 
 void loop() {
-	// TODO: switch screen-draw functions
+	// UiTabs never returns, but keep loop() alive just in case
 	delay(1000);
 }
