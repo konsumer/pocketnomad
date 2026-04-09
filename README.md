@@ -5,6 +5,7 @@ This is a Reticulum/LXMF client for the CardputerADV with CAP LoRa 1262. I may s
 
 - communicate with other nomads (lora, tcp, udp)
 - password-protected identity: reset, and it's secure from tampering
+- Allows communication over TCP/UDP (over wifi) and lora (local)
 
 
 ### nomad
