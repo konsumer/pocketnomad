@@ -18,6 +18,10 @@ struct Settings {
     bool        wifi_enabled  = false;
     std::string wifi_ssid     = "";
     std::string wifi_password = "";
+
+    // TCP Reticulum server
+    std::string tcp_host = "rns.michmesh.net";
+    int         tcp_port = 7822;
 };
 
 extern Settings settings;

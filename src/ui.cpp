@@ -330,7 +330,12 @@ void UiTabs(std::vector<UiTab>& tabs, int initial) {
 
     auto redraw = [&]() {
         auto& f = stack.back();
-        drawList(*f.items, f.scroll, f.selected);
+        if (stack.size() == 1 && tabs[cur].renderFn) {
+            _cv->fillRect(0, 0, UI_SCREEN_W, UI_CONTENT_H, THEME_BG);
+            tabs[cur].renderFn(_cv);
+        } else {
+            drawList(*f.items, f.scroll, f.selected);
+        }
         drawTabBar(tabs, cur);
         _cv->pushSprite(0, 0);
     };

@@ -48,6 +48,9 @@ struct UiItem {
 struct UiTab {
     std::string label;
     std::vector<UiItem> items;
+    // If set, called to draw the content area instead of the items list.
+    // Use UiDrawText / UiDrawHint helpers, or draw to the canvas directly.
+    std::function<void(M5Canvas*)> renderFn;
 };
 
 // Main event loop — runs forever.

@@ -4,7 +4,6 @@
 #include <SPI.h>
 
 #include <M5Cardputer.h>
-#include <utility/PI4IOE5V6408_Class.hpp>
 #include <password.h>
 
 struct IdentityBlob {
@@ -30,6 +29,7 @@ struct IdentityBlob {
 #include "theme.h"
 #include "ui.h"
 #include "settings.h"
+#include "network.h"
 
 using namespace RNS::Utilities;
 
@@ -52,8 +52,6 @@ M5Canvas canvas(&M5Cardputer.Display);
 microStore::FileSystem filesystem{microStore::Adapters::UniversalFileSystem()};
 SPIClass spi(FSPI);
 
-m5::PI4IOE5V6408_Class ioe(0x43, 400000, &m5::In_I2C);
-
 std::string username = "";
 RNS::Identity identity;
 
@@ -66,16 +64,6 @@ static void showBoot(const char* subtitle) {
 	canvas.setTextColor(THEME_FG);
 	canvas.drawCenterString(subtitle, canvas.width() / 2, 40);
 	canvas.pushSprite(0, 0);
-}
-
-static void loraEnable() {
-	if (ioe.begin()) {
-		ioe.setDirection(0, true);
-		ioe.setHighImpedance(0, false);
-		ioe.digitalWrite(0, true);
-	} else {
-		UiFatalError("LORA error.");
-	}
 }
 
 
@@ -97,8 +85,6 @@ void setup() {
 
 	filesystem.init();
 	OS::register_filesystem(filesystem);
-
-	loraEnable();
 
 	if (!OS::directory_exists("/pocketnomad")) OS::create_directory("/pocketnomad");
 	if (!OS::directory_exists("/pocketnomad/peers")) OS::create_directory("/pocketnomad/peers");
@@ -147,14 +133,34 @@ void setup() {
 	// now we have username / identity
 
 	loadSettings();
-
-	// TODO: setup reticulum with lora and/or tcp/udp over wifi (use settings.radio_* / settings.wifi_*)
-	// TODO: setup FreeRTOS task for periodic ANNOUNCE send
-	// TODO: setup FreeRTOS task for logging incoming ANNOUNCE to disk, as peers
-	// TODO: setup FreeRTOS task for logging incoming MESSAGEs (to user) to disk
+	networkInit(identity, username);
 
 	static std::vector<UiTab> tabs = {
-	    {"Home",     {}},
+	    {"Home", {}, [](M5Canvas* cv) {
+	        cv->setTextSize(1);
+	        int y = 6;
+
+	        cv->setTextColor(THEME_HINT);
+	        cv->drawString("Address", 4, y);
+	        y += UI_LINE_H;
+
+	        cv->setTextColor(THEME_FG);
+	        std::string addr = networkGetAddress();
+	        if (addr.empty()) {
+	            cv->drawString("(not ready)", 4, y);
+	        } else {
+	            // 64 hex chars — split into two lines of 32
+	            cv->drawString(addr.substr(0, 32).c_str(), 4, y);
+	            y += UI_LINE_H;
+	            cv->drawString(addr.substr(32).c_str(), 4, y);
+	        }
+	        y += UI_LINE_H + 4;
+
+	        cv->setTextColor(THEME_HINT);
+	        cv->drawString("Peers", 4, y);
+	        cv->setTextColor(THEME_FG);
+	        cv->drawRightString(std::to_string(networkGetPeerCount()).c_str(), UI_SCREEN_W - 4, y);
+	    }},
 	    {"Messages", {}},
 	    {"Peers",    {}},
 	    {"Settings", {}},

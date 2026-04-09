@@ -1,4 +1,5 @@
 #include "settings.h"
+#include "network.h"
 #include <ArduinoJson.h>
 #include <SD.h>
 #include <WiFi.h>
@@ -77,6 +78,8 @@ void loadSettings() {
     settings.wifi_enabled   = doc["wifi_enabled"]    | false;
     settings.wifi_ssid      = doc["wifi_ssid"]       | "";
     settings.wifi_password  = doc["wifi_password"]   | "";
+    settings.tcp_host       = doc["tcp_host"]        | "rns.michmesh.net";
+    settings.tcp_port       = doc["tcp_port"]        | 7822;
 }
 
 void saveSettings() {
@@ -91,6 +94,8 @@ void saveSettings() {
     doc["wifi_enabled"]  = settings.wifi_enabled;
     doc["wifi_ssid"]     = settings.wifi_ssid;
     doc["wifi_password"] = settings.wifi_password;
+    doc["tcp_host"]      = settings.tcp_host;
+    doc["tcp_port"]      = settings.tcp_port;
     serializeJsonPretty(doc, f);
     f.close();
 }
@@ -137,6 +142,7 @@ static void rebuildSettings() {
                                    findFloat(FREQ_OPTS, settings.radio_freq));
                 settings.radio_freq = FREQ_OPTS[sel].value;
                 saveSettings();
+                networkReconfigure();
                 rebuildSettings();
             }
         });
@@ -150,6 +156,7 @@ static void rebuildSettings() {
                                    findInt(SF_OPTS, settings.radio_sf));
                 settings.radio_sf = SF_OPTS[sel].value;
                 saveSettings();
+                networkReconfigure();
                 rebuildSettings();
             }
         });
@@ -163,6 +170,7 @@ static void rebuildSettings() {
                                    findInt(TXPOW_OPTS, settings.radio_txpower));
                 settings.radio_txpower = TXPOW_OPTS[sel].value;
                 saveSettings();
+                networkReconfigure();
                 rebuildSettings();
             }
         });
@@ -176,6 +184,7 @@ static void rebuildSettings() {
                                    findInt(CR_OPTS, settings.radio_cr));
                 settings.radio_cr = CR_OPTS[sel].value;
                 saveSettings();
+                networkReconfigure();
                 rebuildSettings();
             }
         });
@@ -218,6 +227,7 @@ static void rebuildSettings() {
                     settings.wifi_ssid = opts[sel];
                 }
                 saveSettings();
+                networkReconfigure();
                 rebuildSettings();
             }
         });
@@ -229,6 +239,27 @@ static void rebuildSettings() {
                 std::string pw = UiPasswordInput("WiFi Password");
                 if (!pw.empty()) settings.wifi_password = pw;
                 saveSettings();
+                networkReconfigure();
+                rebuildSettings();
+            }
+        });
+
+        // ── TCP Server ─────────────────────────────────────────────────────
+        std::string tcpLabel = settings.tcp_host + ":" + std::to_string(settings.tcp_port);
+        _items->push_back({
+            "TCP Server",
+            tcpLabel,
+            nullptr,
+            []() {
+                std::string h = UiTextInput("RNS TCP Host", settings.tcp_host.c_str());
+                if (!h.empty()) settings.tcp_host = h;
+                std::string ps = UiTextInput("RNS TCP Port", std::to_string(settings.tcp_port).c_str());
+                if (!ps.empty()) {
+                    int p = atoi(ps.c_str());
+                    if (p > 0 && p < 65536) settings.tcp_port = p;
+                }
+                saveSettings();
+                networkReconfigure();
                 rebuildSettings();
             }
         });
